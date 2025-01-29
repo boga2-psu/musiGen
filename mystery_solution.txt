@@ -1,0 +1,46 @@
+# Mystery Languages - Sample Solution
+
+## Classifier
+
+```
+#1: "false + 1"	A: "expected number, got boolean"	B: "expected number, got boolean"	C: "expected number, got boolean"	D: "1"	
+#3: "0 || 1"	A: "expected boolean, got number"	B: "true"	C: "expected boolean, got number"	D: "expected boolean, got number"   
+#4: "true == 1"	A: "false"	B: "true"	C: "expected boolean, got number"	D: "true"   
+#5: "if 0 then 1 else 0"	A: "expected boolean, got number"	B: "0"	C: "expected boolean, got number"	D: "expected boolean, got number"	
+#8: "0 < true"	A: "expected number, got boolean"	B: "expected number, got boolean"	C: "expected number, got boolean"	D: "true"	
+```
+
+## Table
+
+| Language             | A                              | B                              | C                              | D                              |
+|----------------------|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+| `false + 1`          | `expected number, got boolean` | `expected number, got boolean` | `expected number, got boolean` | `1`                            |
+| `0 || 1`             | `expected boolean, got number` | `true`                         | `expected boolean, got number` | `expected boolean, got number` |
+| `true == 1`          | `false`                        | `true`                         | `expected boolean, got number` | `true`                         |
+| `if 0 then 1 else 0` | `expected boolean, got number` | `0`                            | `expected boolean, got number` | `expected boolean, got number` |
+| `0 < true`           | `expected number, got boolean` | `expected number, got boolean` | `expected number, got boolean` | `true`                         |
+
+## Summary
+
+We take as our “base semantics” a language that is “strongly-typed”; that is:
+
+- Arithmetic operators and relational operators ('<','>', etc.) accept only numeric operands.
+- Logical operators accept only boolean operands.
+- The condition to an `if`-expression must be a boolean.
+- Equality operators ('==','!=') accept both boolean and numeric operands; but, in any given
+  application, both operands must have the same type.  We can compare numbers to
+  numbers and booleans to booleans, but asking whether a number is equal to a
+  boolean results in an error.
+
+Now we note how each language differs from the base semantics.
+
+- Language A allows equality comparisons between numbers and booleans, but it
+  does not consider any number equal to any boolean.  It does not allow booleans
+  as operands to *relational* operators.
+- Language B implicitly converts numbers to booleans wherever necessary (namely:
+  logical operators, comparison operators, and `if`-expression conditions).  `0`
+  is “falsy”; all other numbers are “truthy.”
+- Language C is identical to the base semantics; i.e., it is “strongly-typed.”
+- Language D implicitly converts booleans to numbers wherever necessary (namely:
+  arithmetic operators and comparison operators).  `false` becomes `0`; `true`
+  becomes `1`.
