@@ -1,0 +1,17 @@
+%import common.INT -> INT
+%import common.CNAME -> ID
+%import common.WS
+
+%ignore WS
+
+?expr: expr "+" term -> plus
+     | term
+
+?term: term "*" factor -> times
+     | factor
+
+?factor: ID  -> id
+       | INT -> int
+       | "(" expr ")"    
+       | "let" ID "=" expr "in" expr "end" -> let
+
