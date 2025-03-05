@@ -1,32 +1,36 @@
-'''
-Tunes This DSL is for composing simple major mode melodies algorithmically.
-Values: Tunes, which are sequences of (pitch,duration) pairs. Pitches correspond to keys on the piano;
-durations are in seconds.
-Literals: Tunes represented as an explicit sequence of (pitch name,duration) pairs, where pitch names
-C,D,E,F,G,A,B represent the keys of the major scale starting at middle C and durations are integers. The
-pseudo-pitch R can be used to represent a rest of the specified duration.
-Operators: (i) concatenate two tunes so they are heard one after the other; (ii) transpose a tune up or down
-by a specified number of half-steps.
-Implementation: Use the Python midiutil package. See https://midiutil.readthedocs.io/
-en/1.2.1/ to get started.
-Result of evaluation: Output the tune as a one-track midi file called answer.midi; if possible automati-
-cally open an app (such as GarageBand on MacOS or Windows Media Player) to play it.
-Possible additions: accidentals, multiple simultaneous tunes (counterpoint!), chords(harmony!), dynamics,
-etc., etc.
+''' 
+Milestone 1 Fixes
+-----------------
+
+Arithmetic/booleans/lets implemented correctly  9/20 points --
+    - Arithmetic operators now throw errors when
+      given boolean arguments
+
+    - eval() method now has the correct signature
+      and now only accepts an expression as an 
+      argument i.e. eval(e)
+
+Lt implemented correctly -- 2.5/5 points
+    - Now throws an error when given 
+      boolean arguments
+
+Evaluation of new operators -- 5/10 points
+    - Repeat and append operators now work
+
+run() does something with custom value types -- 5/10 points
+    - run() now populates the midi file with note
+      data and opens your defualt media player to
+      attempt to play the resulting file
+
 '''
 
 from midiutil import MIDIFile
 from dataclasses import dataclass
 from typing import Any
-import subprocess
+import os
 
-NOTE_MAP = {
-    "C": 60, "D": 62, "E": 64, "F": 65, "G": 67, "A": 69, "B": 71, "R": -1
-}
-
+type Expr = Add | Sub | Mul | Div | Neg | Lit | Let | Name | If | Or | And | Not | Eq | Lt | Letfun | App | Melody | Append | Repeat
 type Literal = int | bool
-
-type Expr = Add | Sub | Mul | Div | Neg | Lit | Let | Name | Or | And | Not | Eq | Lt | Play
 
 #____________________________________________________________________________________________________________________________
 #
@@ -34,7 +38,7 @@ type Expr = Add | Sub | Mul | Div | Neg | Lit | Let | Name | Or | And | Not | Eq
 #____________________________________________________________________________________________________________________________
 
 @dataclass
-class Add():
+class Add:
     left: Expr
     right: Expr
 
@@ -42,7 +46,7 @@ class Add():
         return f"({self.left} + {self.right})"
 
 @dataclass
-class Sub():
+class Sub:
     left: Expr
     right: Expr
 
@@ -50,7 +54,7 @@ class Sub():
         return f"({self.left} - {self.right})"
 
 @dataclass
-class Mul():
+class Mul:
     left: Expr
     right: Expr
 
@@ -58,7 +62,7 @@ class Mul():
         return f"({self.left} * {self.right})"
 
 @dataclass
-class Div():
+class Div:
     left: Expr
     right: Expr
 
@@ -66,21 +70,21 @@ class Div():
         return f"({self.left} / {self.right})"
 
 @dataclass
-class Neg():
+class Neg:
     subexpr: Expr
 
     def __str__(self) -> str:
         return f"(- {self.subexpr})"
 
 @dataclass
-class Lit():
+class Lit:
     value: Literal
 
     def __str__(self) -> str:
         return f"{self.value}"
     
 @dataclass
-class Let():
+class Let:
     name: str
     defexpr: Expr
     bodyexpr: Expr
@@ -89,28 +93,24 @@ class Let():
         return f"(let {self.name} = {self.defexpr} in {self.bodyexpr})"
 
 @dataclass
-class Name():
+class Name:
     name:str
 
     def __str__(self) -> str:
         return self.name
     
 @dataclass
-class If():
-    pass
-
-    b: bool
-    t: Any
-    e: Any
+class If:
+    cond: Expr
+    t_branch: Expr
+    e_branch: Expr
 
     def __str__(self) -> str:
-        if self.b == True:
-            return self.t
-        return self.e
+        return f"(if {self.cond} then {self.t_branch} else {self.e_branch})"
 
         
 @dataclass
-class Or():
+class Or:
     left: Expr
     right: Expr
     def __str__(self) -> str:
@@ -118,7 +118,7 @@ class Or():
         return f"({self.left} or {self.right})"
 
 @dataclass
-class And():
+class And:
     left: Expr
     right: Expr
 
@@ -126,256 +126,294 @@ class And():
         return f"({self.left} and {self.right})"
 
 @dataclass
-class Not():
+class Not:
     subexpr: Expr
 
     def __str__(self) -> str:
         return f"(not {self.subexpr})"
     
 @dataclass
-class Eq():
-    left: Any
-    right: Any
+class Eq:
+    left: Expr
+    right: Expr
 
     def __str__(self) -> str:
-        if self.left == self.right:
-            return "True"
-        return "False"
+        return f"({self.left} == {self.right})"
 
 @dataclass
-class Lt():
-    left: int
-    right: int
+class Lt:
+    left: Expr
+    right: Expr
 
     def __str__(self) -> str:
-        if self.left < self.right:
-            return "True"
-        return "False"
+        return f"({self.left} < {self.right})"
+
+@dataclass
+class Letfun:
+    name: str
+    param: str
+    bodyexpr: Expr
+    inexpr: Expr
+    def __str__(self) -> str:
+        return f"letfun {self.name} ({self.param}) = {self.bodyexpr} in {self.inexpr} end"
+    
+@dataclass
+class App:
+    fun: Expr
+    arg: Expr
+    def __str__(self) -> str:
+        return f"({self.fun} ({self.arg}))"
 
 @dataclass
 class Melody:
     notes: tuple[tuple[str, int], ...]  # Tuple of (pitch, duration) pairs
 
+    def __str__(self) -> str:
+        note_strs = [f"{pitch}{duration}" for pitch, duration in self.notes]
+        return "[" + " ".join(note_strs) + "]"
+    
 @dataclass
 class Append:
-    left: Melody
-    right: Melody
-
-@dataclass
-class Repeat:
-    count: int
-    melody: Melody
-
-@dataclass
-class Play():
-    pitch: str
-    duration: int
+    left: Expr
+    right: Expr
 
     def __str__(self) -> str:
-        return f"play({self.pitch}, {self.duration})"
+        return f"(append {self.left} {self.right})"
+    
+@dataclass
+class Repeat:
+    count: Expr
+    melody: Expr
 
-    def to_midi(self, track: int, time: float, midi: MIDIFile) -> float:
-        """Adds this note to a MIDI file."""
-        midi_pitch = NOTE_MAP.get(self.pitch)
-        if midi_pitch > 0: # If the value passed is not a rest
-            midi.addNote(track, channel=0, pitch = midi_pitch, time = time, duration = self.duration, volume=100)
-
-        return time + self.duration  # Advance time by note duration
-
-
+    def __str__(self) -> str:
+        return f"(repeat {self.count} {self.melody})"
+    
 
 #____________________________________________________________________________________________________________________________
 #
 # Environment & Compiler
 #____________________________________________________________________________________________________________________________
 
-class CompilerError(Exception):
-    pass
+type Binding[V] = tuple[str,V]  # A pair of name and value
+type Env[V] = tuple[Binding[V], ...] # An environment is a tuple of bindings
 
-class EvalError(Exception):
-    pass
+type Value = int | bool | Melody | Closure
+@dataclass
+class Closure:
+    param: str
+    body: Expr
+    env: Env[Value]
 
-type Value = bool | int | float | Melody
-type Binding[V] = tuple[str, V]  # A pair of name and value
-type Env[V] = tuple[Binding[V], ...]  # An environment is a tuple of bindings
+emptyEnv : Env[Any] = ()  # The empty environment has no bindings
 
-emptyEnv: Env[Any] = ()  # The empty environment has no bindings
-
-def extendEnv[V](name: str, value: V, env: Env[V]) -> Env[V]:
-    """Extend environment with a new variable."""
-    return ((name, value),) + env
+def extendEnv[V](name: str, value: V, env:Env[V]) -> Env[V]:
+    '''Extend environment with a new variable.'''
+    return ((name,value),) + env
 
 def lookupEnv[V](name: str, env: Env[V]) -> V | None:
     """Look up a variable in the environment."""
     for n, v in env:
         if n == name:
             return v
-    return None
+    return None     
+        
+class EvalError(Exception):
+    pass
 
-def evalInEnv(env: Env[Value], e: Expr, midi: MIDIFile, track: int, time: float) -> Value:
+
+# milestone 1 fix
+# ---------------
+# eval() method now has the correct signature
+# and now only accepts an expression as an 
+# argument i.e. eval(e)
+def eval(e: Expr) -> Value :
+    return evalInEnv(emptyEnv, e)
+
+def evalInEnv(env: Env[Value], e:Expr) -> Value:
     match e:
-
-        # Integer Evals
+        # Arithmetic Evals
         # ______________________________________________
-        case Add(l, r):
-            match (evalInEnv(env, l, midi, track, time), evalInEnv(env, r, midi, track, time)):
-                case (int(lv), int(rv)):
+
+        # milestone 1 fix
+        # ---------------
+        # All arithmetic operators throw exceptions for 
+        # anything but int arguments 
+        case Add(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case (int(lv), int(rv)) if not isinstance(lv, bool) and not isinstance(rv, bool):
                     return lv + rv
                 case _:
                     raise EvalError("addition of non-integers")
-        
-        case Sub(l, r):
-            match (evalInEnv(env, l, midi, track, time), evalInEnv(env, r, midi, track, time)):
-                case (int(lv), int(rv)):
+                
+        case Sub(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case (int(lv), int(rv)) if not isinstance(lv, bool) and not isinstance(rv, bool):
                     return lv - rv
                 case _:
                     raise EvalError("subtraction of non-integers")
-
-        case Mul(l, r):
-            match (evalInEnv(env, l, midi, track, time), evalInEnv(env, r, midi, track, time)):
-                case (int(lv), int(rv)):
+                
+        case Mul(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case (int(lv), int(rv)) if not isinstance(lv, bool) and not isinstance(rv, bool):
                     return lv * rv
                 case _:
                     raise EvalError("multiplication of non-integers")
                 
-        case Div(l, r):
-            match (evalInEnv(env, l, midi, track, time), evalInEnv(env, r, midi, track, time)):
-                case (int(lv), int(rv)):
+        case Div(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case (int(lv), int(rv)) if not isinstance(lv, bool) and not isinstance(rv, bool):
                     if rv == 0:
                         raise EvalError("division by zero")
                     return lv // rv
                 case _:
-                    raise EvalError("division of non-integers") 
-                               
+                    raise EvalError("division of non-integers")
+                                
         case Neg(s):
-            match evalInEnv(env, s, midi, track, time):
-                case int(i):
+            match evalInEnv(env,s):
+                case int(i) if not isinstance(i, bool):
                     return -i
                 case _:
                     raise EvalError("negation of non-integer")
-
+                
+        # milestone 1 fix
+        # ---------------
+        # Lt now throws an error when given 
+        # anything but int arguments 
+        case Lt(l, r):
+            match (evalInEnv(env, l), evalInEnv(env, r)):
+                case (int(lv), int(rv)) if not isinstance(lv, bool) and not isinstance(rv, bool):
+                    return lv < rv
+                case _:
+                    raise EvalError("< requires integer operands")
+                
         # Variable Evals
-        # ______________________________________________
-        case Lit(lit):
-            if isinstance(lit, (int, bool)):  # Only allow integers and booleans
-                return lit
-            else:
-                raise EvalError(f"unexpected literal type: {type(lit)}")
-
+        # ______________________________________________                
+        case(Lit(i)):
+                return i
+        
+        case Let(n,d,i):  
+            v = evalInEnv(env, d)
+            newEnv = extendEnv(n, v, env)
+            return evalInEnv(newEnv, i)
+        
         case Name(n):
             v = lookupEnv(n, env)
             if v is None:
                 raise EvalError(f"unbound name {n}")
+            
             return v
-
-        case Let(n, d, b):
-            v = evalInEnv(env, d, midi, track, time)  # Pass midi, track, time to inner evalInEnv
-            newEnv = extendEnv(n, v, env)
-            return evalInEnv(newEnv, b, midi, track, time)  # Pass midi, track, time to inner evalInEnv
         
         # Boolean Evals
         # ______________________________________________
-        case And(l, r):
-            left_val = evalInEnv(env, l, midi, track, time)
-            if not isinstance(left_val, bool):  # Ensure it's a boolean
-                raise EvalError(f"expected boolean type, got {type(left_val)} instead")
-            if not left_val:
-                return False  # Short-circuit, no need to evaluate right operand
-            right_val = evalInEnv(env, r, midi, track, time)
-            if not isinstance(right_val, bool):
-                raise EvalError(f"expected boolean type, got {type(right_val)} instead")
-            return right_val
+        case If(c, t, e):
+            match evalInEnv(env, c):
+                case bool(cond_val):
+                    if cond_val:
+                        return evalInEnv(env, t)
+                    else:
+                        return evalInEnv(env, e)
+                case _:
+                    raise EvalError("condition in if expression must be a boolean")
 
         case Or(l, r):
-            left_val = evalInEnv(env, l, midi, track, time)
-            if not isinstance(left_val, bool):  # Ensure it's a boolean
-                raise EvalError(f"expected boolean type, got {type(left_val)} instead")
-            if left_val:
-                return True  # Short-circuit, no need to evaluate right operand
-            right_val = evalInEnv(env, r, midi, track, time)
-            if not isinstance(right_val, bool):
-                raise EvalError(f"expected boolean type, got {type(right_val)} instead")
-            return right_val
+            match evalInEnv(env, l):
+                case bool(True):
+                    return True
+                case bool(False):
+                    match evalInEnv(env, r):
+                        case bool(rv):
+                            return rv
+                        case _:
+                            raise EvalError("or requires boolean operands")
+                case _:
+                    raise EvalError("or requires boolean operands")
 
+        case And(l, r):
+            match evalInEnv(env, l):
+                case bool(False):
+                    return False
+                case bool(True):
+                    match evalInEnv(env, r):
+                        case bool(rv):
+                            return rv
+                        case _:
+                            raise EvalError("and requires boolean operands")
+                case _:
+                    raise EvalError("and requires boolean operands")
         case Not(s):
-            val = evalInEnv(env, s, midi, track, time)
-            if not isinstance(val, bool):  # Ensure it's a boolean
-                raise EvalError(f"expected boolean type, got {type(val)} instead")
-            return not val
-        
+            match evalInEnv(env, s):
+                case bool(v):
+                    return not v
+                case _:
+                    raise EvalError("not requires a boolean operand")
+
         case Eq(l, r):
-            left_val = evalInEnv(env, l, midi, track, time)
-            right_val = evalInEnv(env, r, midi, track, time)
-            
-            if type(left_val) != type(right_val):
-                return False  # If types are different, they are not equal
-            
-            if isinstance(left_val, Melody) and isinstance(right_val, Melody):
-                return left_val.notes == right_val.notes
+            match (evalInEnv(env, l), evalInEnv(env, r)):
+                case (lv, rv) if (type(lv) == type(rv) or (isinstance(lv, int) and isinstance(rv, int))):
+                    return lv == rv
+                case _:
+                    raise EvalError("== requires operands of the same type")
 
-            else:
-                return left_val == right_val
+                
+        # Function Evals
+        # ______________________________________________         
+        case Letfun(n,p,b,i):
+            c = Closure(p,b,env)
+            newEnv = extendEnv(n,c,env)
+            c.env = newEnv        
+            return evalInEnv(newEnv,i)
         
-        case Lt(l, r):
-            left_val = evalInEnv(env, l, midi, track, time)
-            right_val = evalInEnv(env, r, midi, track, time)
-
-            if not isinstance(left_val, int) or not isinstance(right_val, int):
-                raise EvalError(f"expected two integers for comparison")
-            
-            return left_val < right_val
+        case App(f,a):
+            fun = evalInEnv(env,f)
+            arg = evalInEnv(env,a)
+            match fun:
+                case Closure(p,b,cenv):
+                    newEnv = extendEnv(p,arg,cenv) 
+                    return evalInEnv(newEnv,b)
+                case _:
+                    raise EvalError("application of non-function")
         
-        case If(b, t, e):
-            cond_val = evalInEnv(env, b, midi, track, time)
-
-            if not isinstance(cond_val, bool):
-                raise EvalError(f"expected boolean type, got {type(cond_val)}")
-
-            # Short-circuit --  evaluate 't' or 'e' based on the condition 'b'
-            if cond_val:
-                return evalInEnv(env, t, midi, track, time)  # Returns then branch
-            else:
-                return evalInEnv(env, e, midi, track, time)  # Returns else branch
-
-
         # Domain Evals
         # ______________________________________________
-        case Append(left, right):
-            match (evalInEnv(env, left, midi, track, time), evalInEnv(env, right, midi, track, time)):
-                case (Melody(lm), Melody(rm)):  # Ensure both sides are melodies
-                    return Melody(lm.notes + rm.notes)  # Concatenating the notes
+
+        # milestone 1 fix
+        # ---------------
+        # Domain extensions now work correctly
+        case Melody(notes):
+            return Melody(notes)
+        
+        case Append(l, r):
+            match (evalInEnv(env, l), evalInEnv(env, r)):
+                case (Melody(lm), Melody(rm)):
+                    return Melody(lm + rm)
                 case _:
                     raise EvalError("append operation requires two melodies")
 
         case Repeat(count, melody):
-            match (evalInEnv(env, count, midi, track, time), evalInEnv(env, melody, midi, track, time)):
+            count_val = evalInEnv(env, count)
+            melody_val = evalInEnv(env, melody)
+            match (count_val, melody_val):
                 case (int(i), Melody(mel)):
-                    repeated_notes = mel.notes * i  # Repeat the notes, not the whole Melody object
-                    return Melody(repeated_notes)  # Create a new Melody with repeated notes
+                    if i < 0:
+                        raise EvalError("repeat count cannot be negative")
+                    return Melody(mel * i)
                 case _:
                     raise EvalError("repeat operation requires an integer count and a melody")
 
-        case Play(pitch, duration):
-            # Here you evaluate the Play expression and add it to the MIDI file
-            midi_pitch = NOTE_MAP.get(pitch)
-            if midi_pitch > 0:
-                midi.addNote(track, channel=0, pitch=midi_pitch, time=time, duration=duration, volume=100)
 
-            return time + duration
-
-        case _:
-            raise EvalError(f"Unsupported expression type: {e}")
-        
-
-#____________________________________________________________________________________________________________________________
-#
-# Program execution & test cases
-#____________________________________________________________________________________________________________________________
+def note_name_to_midi(note: str) -> int:
+    note_to_midi = {
+        "C": 60, "C#": 61, "D": 62, "D#": 63, "E": 64, "F": 65, "F#": 66,
+        "G": 67, "G#": 68, "A": 69, "A#": 70, "B": 71
+    }
+    if note in note_to_midi:
+        return note_to_midi[note]
+    else:
+        raise ValueError(f"Invalid note name: {note}")        
 
 
 def run(e: Expr) -> None:
-    print(f"Running expression: {e}")
-    
+    print(f"running: {e}")
     try:
         env = emptyEnv
 
@@ -383,17 +421,34 @@ def run(e: Expr) -> None:
         midi = MIDIFile(1)  # One track
         track = 0
         midi.addTempo(track, 0, 120)  # Set the tempo, 120 BPM
-        match evalInEnv(env, e, midi=midi, track=track, time=0.0):
-            case Melody(m):
-                print(f"Generated melody: {m.notes}")
-            
-                # Save the MIDI file
+        match evalInEnv(env, e):
+
+            # milestone 1 fix
+            # ---------------
+            # run() correctly handles domain extensions now
+            case Melody(notes):
+                print(f"Generated melody: {notes}")
+
                 midi_file = "output.mid"
+                time = 0  # Track time in beats
+
+                for pitch, duration in notes:
+                    if pitch == 'R':  # Rest: Advance time without adding a note
+                        time += duration
+                    else:
+                        midi_note = note_name_to_midi(pitch)
+                        midi.addNote(track=0, channel=0, pitch=midi_note, time=time, duration=duration, volume=100)
+                        time += duration
+
                 with open(midi_file, "wb") as f:
                     midi.writeFile(f)
 
-                # Play the MIDI file using VLC
-                subprocess.run(["vlc", midi_file])
+                # Please note that this just opens the default media
+                # player on whatever machine you are running the interpretter on.
+                # This default player MAY NOT SUPPORT midi files natively. 
+                # I am using the legacy windows media player to listen to the
+                # generated melodies.
+                os.startfile(midi_file)
 
             case int(i):
                 print(f"result: {i}")
@@ -408,6 +463,9 @@ def run(e: Expr) -> None:
         print(f"Evaluation error: {err}")
 
 
+'''
+Old Test Cases for testing the interpretter
+-------------------------------------------
 
 a : Expr = Let('x', Add(Lit(1), Lit(2)), 
                     Sub(Name('x'), Lit(3)))
@@ -416,32 +474,22 @@ b : Expr = Let('x', Lit(1),
                     Let('x', Lit(2), 
                              Mul(Name('x'), Lit(3))))
 
-
-c : Expr = Append(
-        Play(pitch='C', duration=1),
-        Play(pitch='G', duration=2)
-    )
+c: Expr = Melody((("C", 1), ("D", 2)))
 
 d: Expr = Let(
     'melody', 
     Append(
-        Play(pitch='C', duration=1),
-        Play(pitch='G', duration=1),
+        Melody((("C", 1), ("D", 2))), 
+        Repeat(Lit(3), Append(
+            Melody((("E", 1),)),
+            Melody((("G", 3),)),))
     ),
-    Append(
-        Name('melody'),  # Append the second melody to the first one
-        Play(pitch='C', duration=1),
+    Name('melody') 
     )
-)
+
 
 run(a)
 run(b)
 run(c)
-
-
-'''
-For my domain specific extension I chose the music domain. My language SHOULD be able to accept notes and durations, and be able to 
-concatanate and repeat melodies. I was not able to get it to a working state in time for the milestone, however all of the pieces should be present
-as I tested each induvidually while devleoping this document. All of the arithmitic should be up and running, however due to the structure of my 
-evalInEnv() function I have more arguments than the test driver causing it to fail many tests. 
+run(d)
 '''

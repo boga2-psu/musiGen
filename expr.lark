@@ -1,17 +1,51 @@
 %import common.INT -> INT
 %import common.CNAME -> ID
 %import common.WS
+%import common.NEWLINE
 
 %ignore WS
+%ignore NEWLINE
 
-?expr: expr "+" term -> plus
-     | term
+?expr: expr "||" expr -> or
+     | expr "&&" expr -> and
+     | "!" expr -> not
+     | expr "==" expr -> eq
+     | expr "<" expr -> lt
+     | expr1
 
-?term: term "*" factor -> times
+?expr1: expr1 "+" term -> add
+      | expr1 "-" term -> sub
+      | term
+
+?term: term "*" factor -> mul
+     | term "/" factor -> div
      | factor
 
-?factor: ID  -> id
-       | INT -> int
-       | "(" expr ")"    
-       | "let" ID "=" expr "in" expr "end" -> let
+?factor: "-" factor -> neg
+       | application
 
+?application: append_expr
+             | repeat_expr
+             | atom atom -> app
+             | atom
+
+?atom: ID -> id
+     | INT -> int
+     | "(" expr ")" -> parenthesized
+     | "let" ID "=" expr "in" expr "end" -> let
+     | "letfun" ID "(" ID ")" "=" expr "in" expr "end" -> letfun
+     | "if" expr "then" expr "else" expr -> if_expr
+     | melody_expr
+
+if_expr: "if" expr "then" expr "else" expr -> if_expr
+
+melody_expr: "melody" melody_item ("," melody_item)* -> melody
+
+append_expr: "append" "(" expr "," expr ")" -> append
+
+repeat_expr: "repeat" "(" INT "," expr ")" -> repeat
+
+melody_item: NOTE DURATION
+
+NOTE: /[A-G](#|b)?/ | "R"
+DURATION: /[1-9][0-9]*/

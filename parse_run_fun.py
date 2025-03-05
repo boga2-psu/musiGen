@@ -1,12 +1,12 @@
-from interp_arith import Add, Mul, Let, Name, Lit, Expr, run
+from interp_fun import Add, Sub, Mul, Div, Neg, Let, Name, Lit, Ifnz, Letfun, App, Expr, run
 
 from lark import Lark, Token, ParseTree, Transformer
 from lark.exceptions import VisitError
 from pathlib import Path
 
-parser = Lark(Path('expr.lark').read_text(),start='expr',ambiguity='explicit')
+parser = Lark(Path('expr_fun.lark').read_text(),start='expr',ambiguity='explicit')
 
-class ParseError(Exception):
+class ParseError(Exception): 
     pass
 
 def parse(s:str) -> ParseTree:
@@ -35,12 +35,24 @@ class ToExpr(Transformer[Token,Expr]):
         return Add(args[0],args[1])
     def times(self, args:tuple[Expr,Expr]) -> Expr:
         return Mul(args[0],args[1])
+    def minus(self, args:tuple[Expr,Expr]) -> Expr:
+        return Sub(args[0],args[1])
+    def divide(self, args:tuple[Expr,Expr]) -> Expr:
+        return Div(args[0],args[1])
+    def neg(self, args:tuple[Expr]) -> Expr:
+        return Neg(args[0])
     def let(self, args:tuple[Token,Expr,Expr]) -> Expr:
         return Let(args[0].value,args[1],args[2]) 
     def id(self, args:tuple[Token]) -> Expr:
         return Name(args[0].value)
     def int(self,args:tuple[Token]) -> Expr:
         return Lit(int(args[0].value))
+    def ifnz(self,args:tuple[Expr,Expr,Expr]) -> Expr:
+        return Ifnz(args[0],args[1],args[2])
+    def letfun(self,args:tuple[Token,Token,Expr,Expr]) -> Expr:
+        return Letfun(args[0].value,args[1].value,args[2],args[3])
+    def app(self,args:tuple[Expr,Expr]) -> Expr:
+        return App(args[0],args[1])    
     def _ambig(self,_) -> Expr:    # ambiguity marker
         raise AmbiguousParse()
 
