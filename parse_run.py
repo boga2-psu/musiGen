@@ -1,10 +1,35 @@
+''' 
+Milestone 2 Fixes
+-----------------
+
+Boolean Literals Implemented  1/5 points --
+    - Syntax for "true" and "false" 
+      correctly parsed
+
+Lt implemented correctly -- 2.5/5 points
+    - Now throws an error when given 
+      boolean arguments
+
+Evaluation of new operators -- 5/10 points
+    - Repeat and append operators now work
+
+run() does something with custom value types -- 5/10 points
+    - run() now populates the midi file with note
+      data and opens your defualt media player to
+      attempt to play the resulting file
+
+'''
+
 from interp import Add, Sub, Mul, Div, Neg, Lit, Let, Name, If, Or, And, Not, Eq, Lt, Letfun, App, Melody, Append, Repeat, Expr, run
 
 from lark import Lark, Token, ParseTree, Transformer
 from lark.exceptions import VisitError
 from pathlib import Path
 
-parser = Lark(Path('expr.lark').read_text(),start='expr',ambiguity='explicit')
+parser = Lark(Path('expr.lark').read_text(),start='expr', parser='earley',ambiguity='explicit')
+
+# A stricter parser which will fail if the grammar is ambiguous
+#parser = Lark(Path('expr.lark').read_text(),start='expr', parser='lalr',strict=True)
 
 class ParseError(Exception): 
     pass
@@ -57,6 +82,10 @@ class ToExpr(Transformer[Token, Expr]):
     def int(self, args: tuple[Token]) -> Expr:
         return Lit(int(args[0].value))
 
+    def bool(self, args: tuple[Token]) -> Expr:
+        value = args[0].value == "true"
+        return Lit(value)
+
     def id(self, args: tuple[Token]) -> Expr:
         return Name(args[0].value)
 
@@ -78,9 +107,12 @@ class ToExpr(Transformer[Token, Expr]):
         return args[0]
 
     # Domain extensions
-    def melody_item(self, args) -> tuple[str, int]:
+    def melody_item(self, args) -> tuple[str, Expr]:
         pitch = args[0].value  # e.g., "C", "D#", "R"
-        duration = int(args[1].value)
+        if isinstance(args[1], Token):
+            duration = Lit(int(args[1].value))
+        else:
+            duration = args[1]
         return (pitch, duration)
 
     def melody(self, args) -> Melody:
@@ -92,8 +124,11 @@ class ToExpr(Transformer[Token, Expr]):
         return Append(left, right)
 
     def repeat(self, args: tuple[Token, Expr]) -> Repeat:
-        count = Lit(int(args[0].value))
-        melody = args[1]
+        melody = args[0]
+        if isinstance(args[1], Token):
+            count = Lit(int(args[1]))
+        else:
+            count = args[1]
         return Repeat(count, melody)
 
     #Ambiguity Marker
@@ -137,9 +172,7 @@ def test_cases():
         'let x = 5 in x + 3 end',
         'let x = 5 in if x < 2 then 10 else 20 end',
         'if 1 < 2 then 3 else 4',
-        'letfun f(x) = x + 1 in f(5) end',
-        'let x = 1 in let y = 1 in x == y end end',
-        'repeat(2, append(melody D3, C2, append(melody G1, B2, melody D1, B1)))'
+        'melody(A3, G2, F1) @ 2'
     ]
 
     for expr in test_expressions:

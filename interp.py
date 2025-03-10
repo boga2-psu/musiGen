@@ -221,11 +221,6 @@ class EvalError(Exception):
     pass
 
 
-# milestone 1 fix
-# ---------------
-# eval() method now has the correct signature
-# and now only accepts an expression as an 
-# argument i.e. eval(e)
 def eval(e: Expr) -> Value :
     return evalInEnv(emptyEnv, e)
 
@@ -233,11 +228,6 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
     match e:
         # Arithmetic Evals
         # ______________________________________________
-
-        # milestone 1 fix
-        # ---------------
-        # All arithmetic operators throw exceptions for 
-        # anything but int arguments 
         case Add(l,r):
             match (evalInEnv(env,l), evalInEnv(env,r)):
                 case (int(lv), int(rv)) if not isinstance(lv, bool) and not isinstance(rv, bool):
@@ -275,10 +265,6 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
                 case _:
                     raise EvalError("negation of non-integer")
                 
-        # milestone 1 fix
-        # ---------------
-        # Lt now throws an error when given 
-        # anything but int arguments 
         case Lt(l, r):
             match (evalInEnv(env, l), evalInEnv(env, r)):
                 case (int(lv), int(rv)) if not isinstance(lv, bool) and not isinstance(rv, bool):
@@ -376,11 +362,13 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
         # Domain Evals
         # ______________________________________________
 
-        # milestone 1 fix
-        # ---------------
-        # Domain extensions now work correctly
         case Melody(notes):
-            return Melody(notes)
+            evaluated_notes = []
+            for note in notes:
+                pitch, duration = note
+                evaluated_duration = evalInEnv(env, duration)
+                evaluated_notes.append((pitch, evaluated_duration))
+            return Melody(tuple(evaluated_notes))
         
         case Append(l, r):
             match (evalInEnv(env, l), evalInEnv(env, r)):
@@ -391,6 +379,10 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
 
         case Repeat(count, melody):
             count_val = evalInEnv(env, count)
+
+            if not isinstance(count_val, int):
+                raise EvalError(f"Repeat count should be an integer, got {type(count_val)}")
+
             melody_val = evalInEnv(env, melody)
             match (count_val, melody_val):
                 case (int(i), Melody(mel)):
@@ -423,9 +415,6 @@ def run(e: Expr) -> None:
         midi.addTempo(track, 0, 120)  # Set the tempo, 120 BPM
         match evalInEnv(env, e):
 
-            # milestone 1 fix
-            # ---------------
-            # run() correctly handles domain extensions now
             case Melody(notes):
                 print(f"Generated melody: {notes}")
 
@@ -461,35 +450,3 @@ def run(e: Expr) -> None:
         
     except EvalError as err:
         print(f"Evaluation error: {err}")
-
-
-'''
-Old Test Cases for testing the interpretter
--------------------------------------------
-
-a : Expr = Let('x', Add(Lit(1), Lit(2)), 
-                    Sub(Name('x'), Lit(3)))
-
-b : Expr = Let('x', Lit(1), 
-                    Let('x', Lit(2), 
-                             Mul(Name('x'), Lit(3))))
-
-c: Expr = Melody((("C", 1), ("D", 2)))
-
-d: Expr = Let(
-    'melody', 
-    Append(
-        Melody((("C", 1), ("D", 2))), 
-        Repeat(Lit(3), Append(
-            Melody((("E", 1),)),
-            Melody((("G", 3),)),))
-    ),
-    Name('melody') 
-    )
-
-
-run(a)
-run(b)
-run(c)
-run(d)
-'''

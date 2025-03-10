@@ -1,21 +1,51 @@
+# Milestone 2 Fixes
+# -----------------
+# 
+# Boolean Literals Implemented  1/5 points --
+#      - Grammar for boolean literals 
+#        implemented
+# 
+# Fixed core language precedence 33/45 points --
+#      - ||, &&, !, ==, and < now have the 
+#        correct precedence
+#      
+#      - if statements now have the lowest 
+#        precedence
+#
+# Domain extension now allows exprs as arguments 25/30 points --
+#      - General experessions (exprs) are now allowed in 
+#        Melody expressions as durations granted they are 
+#        wrapped in parentheses
+#      
+#      - Repeat expressions now allow exprs as arguments 
+#        with the same rules as Melody expressions
+
 %import common.INT -> INT
-%import common.CNAME -> ID
 %import common.WS
-%import common.NEWLINE
-
+%import common.CNAME -> ID
 %ignore WS
-%ignore NEWLINE
 
-?expr: expr "||" expr -> or
-     | expr "&&" expr -> and
-     | "!" expr -> not
-     | expr "==" expr -> eq
-     | expr "<" expr -> lt
-     | expr1
 
-?expr1: expr1 "+" term -> add
-      | expr1 "-" term -> sub
-      | term
+?expr: if_expr
+     | melody_expr
+     | or_expr
+
+?or_expr: or_expr "||" and_expr -> or
+        | and_expr
+
+?and_expr: and_expr "&&" not_expr -> and
+         | not_expr
+
+?not_expr: "!" not_expr -> not
+         | cmp_expr
+
+?cmp_expr: sum_expr 
+         | sum_expr "==" sum_expr -> eq
+         | sum_expr "<" sum_expr -> lt
+
+?sum_expr: sum_expr "+" term -> add
+         | sum_expr "-" term -> sub
+         | term
 
 ?term: term "*" factor -> mul
      | term "/" factor -> div
@@ -24,28 +54,35 @@
 ?factor: "-" factor -> neg
        | application
 
-?application: append_expr
-             | repeat_expr
-             | atom atom -> app
-             | atom
+?application: application atom -> app
+            | atom
 
 ?atom: ID -> id
      | INT -> int
+     | "true" -> bool
+     | "false" -> bool
      | "(" expr ")" -> parenthesized
-     | "let" ID "=" expr "in" expr "end" -> let
-     | "letfun" ID "(" ID ")" "=" expr "in" expr "end" -> letfun
-     | "if" expr "then" expr "else" expr -> if_expr
-     | melody_expr
+     | let_expr
+     | letfun_expr
 
-if_expr: "if" expr "then" expr "else" expr -> if_expr
+?let_expr: "let" ID "=" expr "in" expr "end" -> let
+?letfun_expr: "letfun" ID "(" ID ")" "=" expr "in" expr "end" -> letfun
 
-melody_expr: "melody" melody_item ("," melody_item)* -> melody
+?if_expr: "if" expr "then" expr "else" expr -> if_expr
 
-append_expr: "append" "(" expr "," expr ")" -> append
+?melody_expr: melody
+            | append_expr
+            | repeat_expr
 
-repeat_expr: "repeat" "(" INT "," expr ")" -> repeat
+?append_expr: melody_expr "++" melody_expr -> append
+            | melody_expr
 
-melody_item: NOTE DURATION
+?repeat_expr: melody_expr "@" (DURATION | "(" expr ")") -> repeat
+            | melody_expr
+
+melody: "melody" "(" melody_item ("," melody_item)* ")" -> melody
+
+melody_item: NOTE (DURATION | "(" expr ")")
 
 NOTE: /[A-G](#|b)?/ | "R"
-DURATION: /[1-9][0-9]*/
+DURATION: /[1-9][0-9]*/ 
