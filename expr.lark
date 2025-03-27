@@ -1,34 +1,16 @@
-# Milestone 2 Fixes
-# -----------------
-# 
-# Boolean Literals Implemented  1/5 points --
-#      - Grammar for boolean literals 
-#        implemented
-# 
-# Fixed core language precedence 33/45 points --
-#      - ||, &&, !, ==, and < now have the 
-#        correct precedence
-#      
-#      - if statements now have the lowest 
-#        precedence
-#
-# Domain extension now allows exprs as arguments 25/30 points --
-#      - General experessions (exprs) are now allowed in 
-#        Melody expressions as durations granted they are 
-#        wrapped in parentheses
-#      
-#      - Repeat expressions now allow exprs as arguments 
-#        with the same rules as Melody expressions
-
 %import common.INT -> INT
 %import common.WS
-%import common.CNAME -> ID
 %ignore WS
 
 
-?expr: if_expr
-     | melody_expr
-     | or_expr
+?expr: expr ";" if_expr -> seq
+     | song_expr
+     | if_expr
+
+?if_expr: "if" expr "then" expr "else" or_expr -> if_expr
+         | ID ":=" or_expr -> assign
+         | "show" expr -> show
+         | or_expr
 
 ?or_expr: or_expr "||" and_expr -> or
         | and_expr
@@ -39,9 +21,9 @@
 ?not_expr: "!" not_expr -> not
          | cmp_expr
 
-?cmp_expr: sum_expr 
-         | sum_expr "==" sum_expr -> eq
-         | sum_expr "<" sum_expr -> lt
+?cmp_expr: cmp_expr "==" sum_expr -> eq
+         | cmp_expr "<" sum_expr -> lt
+         | sum_expr
 
 ?sum_expr: sum_expr "+" term -> add
          | sum_expr "-" term -> sub
@@ -54,13 +36,14 @@
 ?factor: "-" factor -> neg
        | application
 
-?application: application atom -> app
-            | atom
+?application: atom "(" expr ")" -> app
+           | atom
 
 ?atom: ID -> id
      | INT -> int
-     | "true" -> bool
-     | "false" -> bool
+     | "read" -> read
+     | TRUE -> bool
+     | FALSE -> bool
      | "(" expr ")" -> parenthesized
      | let_expr
      | letfun_expr
@@ -68,21 +51,26 @@
 ?let_expr: "let" ID "=" expr "in" expr "end" -> let
 ?letfun_expr: "letfun" ID "(" ID ")" "=" expr "in" expr "end" -> letfun
 
-?if_expr: "if" expr "then" expr "else" expr -> if_expr
+?song_expr: play
 
-?melody_expr: melody
-            | append_expr
-            | repeat_expr
+?play: "<=" chorus "=>" -> play
+     | chorus
 
-?append_expr: melody_expr "++" melody_expr -> append
-            | melody_expr
+?chorus: "**" repeat -> chorus
+       | repeat
 
-?repeat_expr: melody_expr "@" (DURATION | "(" expr ")") -> repeat
-            | melody_expr
+?repeat: append "@" (DURATION | "(" expr ")") -> repeat
+       | append
 
-melody: "melody" "(" melody_item ("," melody_item)* ")" -> melody
+?append: append "++" melody_expr -> append
+       | melody_expr
+
+?melody_expr: "melody" "(" melody_item ("," melody_item)* ")" -> melody
 
 melody_item: NOTE (DURATION | "(" expr ")")
 
 NOTE: /[A-G](#|b)?/ | "R"
-DURATION: /[1-9][0-9]*/ 
+DURATION: /[1-9][0-9]*/
+TRUE: "true"
+FALSE: "false"
+ID: /(?!true|false|read)[a-zA-Z_][a-zA-Z0-9_]*/

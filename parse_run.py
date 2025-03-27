@@ -1,26 +1,4 @@
-''' 
-Milestone 2 Fixes
------------------
-
-Boolean Literals Implemented  1/5 points --
-    - Syntax for "true" and "false" 
-      correctly parsed
-
-Lt implemented correctly -- 2.5/5 points
-    - Now throws an error when given 
-      boolean arguments
-
-Evaluation of new operators -- 5/10 points
-    - Repeat and append operators now work
-
-run() does something with custom value types -- 5/10 points
-    - run() now populates the midi file with note
-      data and opens your defualt media player to
-      attempt to play the resulting file
-
-'''
-
-from interp import Add, Sub, Mul, Div, Neg, Lit, Let, Name, If, Or, And, Not, Eq, Lt, Letfun, App, Melody, Append, Repeat, Expr, run
+from interp import Add, Sub, Mul, Div, Neg, Lit, Let, Name, If, Or, And, Not, Eq, Lt, Assign, Read, Letfun, App, Seq, Show, Play, Melody, Append, Chorus, Repeat, Expr, run
 
 from lark import Lark, Token, ParseTree, Transformer
 from lark.exceptions import VisitError
@@ -88,6 +66,12 @@ class ToExpr(Transformer[Token, Expr]):
 
     def id(self, args: tuple[Token]) -> Expr:
         return Name(args[0].value)
+    
+    def assign(self, args: tuple[Token, Expr]) -> Expr:
+        return Assign(args[0].value, args[1])
+    
+    def read(self, args: tuple) -> Expr:
+        return Read()
 
     # Control structures
     def if_expr(self, args: tuple[Expr, Expr, Expr]) -> Expr:
@@ -102,6 +86,12 @@ class ToExpr(Transformer[Token, Expr]):
 
     def app(self, args: tuple[Expr, Expr]) -> Expr:
         return App(args[0], args[1])
+
+    def seq(self, args: tuple[Expr, Expr]) -> Expr:
+        return Seq(args[0], args[1])
+
+    def show(self, args: tuple[Expr]) -> Expr:
+        return Show(args[0])
 
     def parenthesized(self, args):
         return args[0]
@@ -119,6 +109,9 @@ class ToExpr(Transformer[Token, Expr]):
         # args is a list of melody_item tuples like [("C", 1), ("D", 3)]
         return Melody(tuple(args))
 
+    def play(self, args) -> Play:
+        return Play(args[0])
+
     def append(self, args: tuple[Expr, Expr]) -> Append:
         left, right = args
         return Append(left, right)
@@ -130,6 +123,9 @@ class ToExpr(Transformer[Token, Expr]):
         else:
             count = args[1]
         return Repeat(count, melody)
+    
+    def chorus(self, args) -> Chorus:
+        return Chorus(args[0])
 
     #Ambiguity Marker
     def _ambig(self, _) -> Expr:
@@ -163,21 +159,60 @@ def parse_and_run(s: str):
     except EOFError:
         exit
 
-def test_cases():
-    test_expressions = [
-        '2 + 2',
-        '2 * 2',
-        '2 -2',
-        '2 / 2',
-        'let x = 5 in x + 3 end',
-        'let x = 5 in if x < 2 then 10 else 20 end',
-        'if 1 < 2 then 3 else 4',
-        'melody(A3, G2, F1) @ 2'
-    ]
+# def test_cases():
+#     test_expressions = [
+#         '2 + 2',
+#         '2 * 2',
+#         '2 -2',
+#         '2 / 2',
+#         'if 5 < 10 then 42 else 99',
+#         'letfun a(b) = c in d := e end',
+#         'let a = b in c := d end',
+#         'let x = 5 in if x < 10 then x + 1 else x - 1 end',
+#         'let x = 5 in x + 3 end',
+#         'let a = show x in b end',
+#         'letfun a(b) = c in show x end',
+#         'a(show x)',
+#         'show melody(A1, F1, G1)',
+#         'show letfun a(b) = c in d end',
+#         'show if a then b else c',
+#         'show true',
+#         'x := ! a',
+#         'x := letfun a(b) = c in d end',
+#         'x; a && b',
+#         'melody(A3, F2) ++ melody(G1, C5)',
+#         'melody(A5, G2, C1) @ 2',
+#         'melody(A1, G3) ++ melody(G3, B2) @ 2',
+#         '** melody(A1, B1, C1, G1, F1, D1)',
+#         '<= melody(A1, G2, F1, C2, F1, D1) =>',
+#         '<= melody(A1, G1) ++ melody(B1, C1) @ 2 =>',
+#         '<= ** melody(B1, D2, A1, G2, A1, B3) =>'
+#     ]
 
-    for expr in test_expressions:
-        parse_and_run(expr)
-        print("-" * 60)
+#     for expr in test_expressions:
+#         parse_and_run(expr)
+#         print("-" * 60)
     
+# test_cases()
 
-test_cases()
+def driver():
+    print("Welcome to the Cb (C Flat) interpretter. Type 'exit' to quit.")
+
+    while True:
+        try:
+            uInput = input("> ")
+
+            if uInput.lower() in {"exit", "quit"}:
+                print("Shutting down...")
+                break
+
+            parse_and_run(uInput)
+
+        except KeyboardInterrupt:
+                print("Shutting down...")
+                break
+
+        except Exception:
+            pass
+
+driver()
