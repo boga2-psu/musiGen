@@ -485,10 +485,10 @@ def note_to_freq(note: str) -> float:
     # Whole step frequency ratio (12th root of 2)
     ratio = 2 ** (1/12) 
 
-    notes = ["A", "B", "C", "D", "E", "F", "G"]
+    notes = ["A", "B", "C", "D", "E", "F", "G", "R"]
     
     if note == "R":
-        return None
+        return 0.0
     
     # Check for an octave shift
     if note[-2:] in ["+1", "-1"]:
@@ -509,33 +509,32 @@ def note_to_freq(note: str) -> float:
 
 
 def generate_sin_wave(freq: float, duration: float, sample_rate: int = 44100) -> np.ndarray:
-    if freq is None:
-        return np.zeros(int(sample_rate * duration)) 
+    num_samples = int(round(sample_rate * duration))
+
+    if freq == 0.0:
+        return np.zeros(num_samples) 
 
     # Creates a numpy array to store the waveforms in
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    t = np.linspace(0, duration, num_samples, endpoint=False)
     # Generates the sin wave based on the frequency provided
     sin_wave = np.sin(2 * np.pi * freq * t)
     # Creates an evelope around the wave to eliminate popping
-    envelope = adsr_envelope(duration, sample_rate)
+    envelope = adsr_envelope(sample_rate, num_samples)
 
     return sin_wave * envelope
 
 
 # Creates an Attack, Decay, Sustain Release envelope for a given wave
-def adsr_envelope(duration, sample_rate, attack=0.1, decay=0.1, sustain=0.6, release=0.1):
-    
-    total_samples = int(duration * sample_rate)  # Convert duration to samples
-
-    attack_samples = int(sample_rate * attack)
-    decay_samples = int(sample_rate * decay)
-    release_samples = int(sample_rate * release)
+def adsr_envelope(sample_rate, num_samples, attack=0.1, decay=0.1, sustain=0.6, release=0.1):
+    attack_samples = int(round(sample_rate * attack))
+    decay_samples = int(round(sample_rate * decay))
+    release_samples = int(round(sample_rate * release))
     
     # Ensure sustain lasts for the remaining time
-    sustain_samples = max(0, total_samples - (attack_samples + decay_samples + release_samples))
+    sustain_samples = max(0, num_samples - (attack_samples + decay_samples + release_samples))
 
     # Create an envelope of the correct size
-    envelope = np.zeros(total_samples)
+    envelope = np.zeros(num_samples)
 
     # Define ADSR segments
     envelope[:attack_samples] = np.linspace(0, 1, attack_samples, endpoint=False)
@@ -548,18 +547,16 @@ def adsr_envelope(duration, sample_rate, attack=0.1, decay=0.1, sustain=0.6, rel
 
 def play_melody(melody, sample_rate: int = 44100, bpm: int = 120):
     
+    eighthDuration = 120 / (bpm * 2)
+
     # Checks and plays a single melody object 
     if isinstance(melody, Melody):  
         audio = np.array([])
         for pitch, duration in melody.notes:
             freq = note_to_freq(pitch)
-            #duration *= (60 / (bpm * 2)) # adjusting the duration to eighth notes instead of seconds
-            
-            if freq is None:
-                wave = np.zeros(int(sample_rate * duration))
-            else:
-                wave = generate_sin_wave(freq, duration, sample_rate)
-            
+            duration *= eighthDuration
+
+            wave = generate_sin_wave(freq, duration, sample_rate)
             audio = np.append(audio, wave)
 
         final_audio = audio  
@@ -572,13 +569,9 @@ def play_melody(melody, sample_rate: int = 44100, bpm: int = 120):
             audio = np.array([])  
             for pitch, duration in m.notes:
                 freq = note_to_freq(pitch)
-                #duration *= (60 / (bpm * 2)) # adjusting the duration to eighth notes instead of seconds
+                duration *= eighthDuration
 
-                if freq is None:
-                    wave = np.zeros(int(sample_rate * duration))
-                else:
-                    wave = generate_sin_wave(freq, duration, sample_rate)
-                
+                wave = generate_sin_wave(freq, duration, sample_rate)
                 audio = np.append(audio, wave)
             
             audio_layers.append(audio)
